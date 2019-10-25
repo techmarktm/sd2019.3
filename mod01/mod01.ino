@@ -16,8 +16,8 @@ const char* mqttUser = "niwveled";    //user
 const char* mqttPassword = "Jhkots1UqEvF";  //password
 
 #define TOPICO_SUBSCRIBE "atuadores"     //tópico MQTT de escuta
-#define TOPICO_PUBLISH   "sensores"    //tópico MQTT de envio de informações para Broker
-#define ID_MQTT  "camadaCoisas"     //id mqtt (para identificação de sessão)
+#define TOPICO_PUBLISH   "sensores/porta"    //tópico MQTT de envio de informações para Broker
+#define ID_MQTT  "camadaCoisas1"     //id mqtt (para identificação de sessão)
 
 
 
@@ -25,15 +25,18 @@ const char* mqttPassword = "Jhkots1UqEvF";  //password
 WiFiClient espClient; // Cria o objeto espClient
 PubSubClient MQTT(espClient); // Instancia o Cliente MQTT passando o objeto espClient
 
-char EstadoSaida = '0';  //variável que armazena o estado atual da saída
+char EstadoSaida1 = '0';  //variável que armazena o estado atual da saída da luz 1
+char EstadoSaida2 = '0';  //variável que armazena o estado atual da saída da luz 1
+char EstadoPorta = '0'; //variável que armazena o estado atual do sensor da porta
 
-const int portaLed = GPIO_NUM_18;
-const int portaLDR = 34;
+const int portaLuz1 = GPIO_NUM_19; //porta/pino da luz 1
+const int portaLuz2 = GPIO_NUM_18; //porta/pino da luz 2
+const int sensorPorta = GPIO_NUM_34; //porta/pino do sensor de porta
 
-String valorLDR_str;
-char valorLDR[10];
+String valorSP_str;
+char valorSP[4];
  
-//Prototypes
+//Declaração das Funções
 void initSerial();
 void initWiFi();
 void initMQTT();
@@ -52,7 +55,8 @@ void setup()
     initSerial();
     initWiFi();
     initMQTT();
-    pinMode(portaLDR, INPUT);
+    int sensor = analogRead(sensorPorta);
+    verificaEstadoPorta(sensor);
 }
  
 //Função: inicializa comunicação serial com baudrate 115200 (para fins de monitorar no terminal serial 
@@ -105,22 +109,38 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length)
     }
   
     //toma ação dependendo da string recebida:
-    //verifica se deve colocar nivel alto de tensão na saída D4:
+    //verifica se deve colocar nivel alto de tensão na saída da luz 1:
     //IMPORTANTE: o Led já contido na placa é acionado com lógica invertida (ou seja,
     //enviar HIGH para o output faz o Led apagar / enviar LOW faz o Led acender)
-    if (msg.equals("Desliga") && EstadoSaida == '0')
+    if (msg.equals("DesligaLuz1") && EstadoSaida1 == '0')
     {
-        digitalWrite(portaLed, LOW);
-        EstadoSaida = '1';
-        EnviaEstadoOutputMQTT();
+        digitalWrite(portaLuz1, LOW);
+        EstadoSaida1 = '1';
+        //EnviaEstadoOutputMQTT();
     }
 
-    //verifica se deve colocar nivel alto de tensão na saída D4:
-    if (msg.equals("Liga") && EstadoSaida == '1')
+    //verifica se deve colocar nivel alto de tensão na saída da luz 1:
+    if (msg.equals("LigaLuz1") && EstadoSaida1 == '1')
     {
-        digitalWrite(portaLed, HIGH);
-        EstadoSaida = '0';
-        EnviaEstadoOutputMQTT();
+        digitalWrite(portaLuz1, HIGH);
+        EstadoSaida1 = '0';
+        //EnviaEstadoOutputMQTT();
+    }
+
+    //verifica se deve colocar nivel baixo de tensão na saída da luz 1:
+    if (msg.equals("DesligaLuz2") && EstadoSaida2 == '0')
+    {
+        digitalWrite(portaLuz2, LOW);
+        EstadoSaida2 = '1';
+        //EnviaEstadoOutputMQTT();
+    }
+
+    //verifica se deve colocar nivel alto de tensão na saída da luz 1:
+    if (msg.equals("LigaLuz2") && EstadoSaida2 == '1')
+    {
+        digitalWrite(portaLuz2, HIGH);
+        EstadoSaida2 = '0';
+        //EnviaEstadoOutputMQTT();
     }
     
 }
@@ -192,10 +212,10 @@ void VerificaConexoesWiFIEMQTT(void)
 //Retorno: nenhum
 void EnviaEstadoOutputMQTT(void)
 {
-    if (EstadoSaida == '0')
+    if (EstadoSaida1 == '0')
       MQTT.publish(TOPICO_PUBLISH, "LedsLigados");
 
-    if (EstadoSaida == '1')
+    if (EstadoSaida1 == '1')
       MQTT.publish(TOPICO_PUBLISH, "LedsDesligados");
 
     Serial.println("- Estado da saida enviado ao broker!");
@@ -209,24 +229,64 @@ void InitOutput(void)
 {
     //IMPORTANTE: o Led já contido na placa é acionado com lógica invertida (ou seja,
     //enviar HIGH para o output faz o Led apagar / enviar LOW faz o Led acender)
-    pinMode(portaLed, OUTPUT);
-    digitalWrite(portaLed, HIGH); 
+    pinMode(portaLuz1, OUTPUT);
+    digitalWrite(portaLuz1, HIGH); 
+    pinMode(portaLuz2, OUTPUT);
+    digitalWrite(portaLuz2, HIGH); 
+    pinMode(sensorPorta, INPUT);
 }
 
+//verifica o estado inicial do sensor de porta (ao ligar o esp32)
+void verificaEstadoPorta(int sensor){
+  Serial.println("Estado Inicial do Sensor de Porta:");
+  if (sensor > 0){
+    EstadoPorta = '0';
+    Serial.println("Fechada");
+  }
+  else {
+    EstadoPorta = '1';
+    Serial.println("Aberta");
+  }
+}
+
+void eventoSensorPorta(){
+  
+    int sensor = analogRead(sensorPorta);
+  
+    if (sensor == 0 && EstadoPorta == '0'){
+      Serial.println("Valor do Sensor de Porta: A Porta foi aberta.");
+      Serial.println(sensor);
+    
+      //publica o evento da porta ter sido aberta
+      valorSP_str = String(sensor); //converting ftemp (the float variable above) to a string 
+      valorSP_str.toCharArray(valorSP, valorSP_str.length() + 1); //packaging up the data to publish to mqtt whoa...
+      
+      MQTT.publish(TOPICO_PUBLISH, valorSP);
+      
+      EstadoPorta = '1';
+    }
+
+    if (sensor > 0 && EstadoPorta != '0'){
+      Serial.println("Valor do Sensor de Porta: A Porta foi fechada.");
+      Serial.println(sensor);
+    
+      //publica o evento da porta ter sido fechada
+      valorSP_str = String(sensor); //converting ftemp (the float variable above) to a string 
+      valorSP_str.toCharArray(valorSP, valorSP_str.length() + 1); //packaging up the data to publish to mqtt whoa...
+      
+      MQTT.publish(TOPICO_PUBLISH, valorSP);
+      
+      EstadoPorta = '0';
+    }
+  delay(1000);
+}
 
 //programa principal
 void loop() 
 {   
-    int lumi = analogRead(portaLDR);   
-    Serial.println("Nível de Luminosidade: ");
-    Serial.println(lumi);
-
-    valorLDR_str = String(lumi); //converting ftemp (the float variable above) to a string 
-    valorLDR_str.toCharArray(valorLDR, valorLDR_str.length() + 1); //packaging up the data to publish to mqtt whoa...
     
-    MQTT.publish(TOPICO_PUBLISH, valorLDR);
-    
-    delay(1000);
+    //verifica periodicamente se houve variação no sensor da porta (se ela foi fechada ou aberta)
+    eventoSensorPorta();
   
     //garante funcionamento das conexões WiFi e ao broker MQTT
     VerificaConexoesWiFIEMQTT();
