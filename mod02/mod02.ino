@@ -6,6 +6,11 @@
 #include <IRrecv.h>
 #include <IRutils.h>
 
+//estabelece de quanto em quanto tempo a informação do sensor será enviada pro broker
+//basta mudar o ultimo valor para o numero de minutos entre um envio e outro. Padrão: 1 minuto
+#define ATRASO_SENSOR (1000UL * 60 * 1)
+unsigned long tempoDecorrido = millis() + ATRASO_SENSOR;//começa a contar o tempo
+
 
 // WIFI
 const char* SSID = "Repeat"; // SSID / nome da rede WI-FI que deseja se conectar
@@ -232,10 +237,8 @@ void leituraLDR(){
     MQTT.publish(TOPICO_PUBLISH_LDR, valorLDR);
 }
 
-//programa principal
-void loop()
-{
-    //imprime no monitor caso algo seja detectado no IR. Apenas para consulta
+//imprime no monitor caso algo seja detectado no IR. Apenas para consulta
+void leitorIR(){
     if (irrecv.decode(&results)) {
       // print() & println() nao suportam long longs. (uint64_t)
       Serial.println("Recebido pelo InfraVermelho: ");
@@ -243,10 +246,22 @@ void loop()
       Serial.println("");
       irrecv.resume();  // Continua para receber o próximo valor
     }
+}
+
+//programa principal
+void loop()
+{
+
+    // verifica se passou o tempo de atraso estipulado
+    if((long)(millis() - tempoDecorrido) >= 0) {
+      //chama a funcao para receber os dados do LDR
+      leituraLDR();
+      tempoDecorrido += ATRASO_SENSOR;
+    }
     
-    leituraLDR(); //chama a funcao para receber os dados do LDR
+    leitorIR();
     
-    delay(1000); //aguarda 1 segundo para continuar execucao. No caso, é o atraso de leitura do LDR
+    //delay(1000); //aguarda 1 segundo para continuar execucao. No caso, é o atraso de leitura do LDR
   
     //garante funcionamento das conexões WiFi e ao broker MQTT
     VerificaConexoesWiFIEMQTT();
