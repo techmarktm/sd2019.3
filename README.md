@@ -24,6 +24,20 @@ Drivers Utilizados:
 
 CH34x para o ESP8266 e CP210x para o ESP32.
 
+Objetivos:
+-------------
+
+- \[x] Comunicar com Broker
+- \[x] Obter informações do sensor LDR e enviar para um tópico do broker a cada X minutos
+- \[x] Obter informações do sensor de porta e enviar para um tópico do broker a cada evento (abrir ou fechar a porta)
+- \[x] Obter informações do sensor infravermelho
+- \[x] Acionar relés para ligar luzes (e receber uma mensagem do Broker solicitando tal acionamento)
+- \[x] Acionar o infravermelho para ligar/desligar o projetor (e receber uma mensagem do Broker solicitando tal acionamento)
+- \[ ] Definir quais tópicos serão utilizados para os sensores e atuadores junto ao grupo do Broker
+- \[ ] Definir se vai utilizar sensor de temperatura e o ventilador, e em caso positivo, pedir ao Pagani tais itens
+- \[ ] Marcar um dia para verificar a situação do interruptor das luzes na sala de aula (se possível, acompanhado de alguém que faça manutenção e etc)
+- \[ ] Obter códigos do controle remoto do projetor
+
 ### Informações gerais
 
 Durante a fase de testes, utilizamos o seviço em nuvem do MQTT:
