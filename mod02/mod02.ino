@@ -8,23 +8,42 @@
 
 //estabelece de quanto em quanto tempo a informação do sensor será enviada pro broker
 //basta mudar o ultimo valor para o numero de minutos entre um envio e outro. Padrão: 1 minuto
-#define ATRASO_SENSOR (1000UL * 60 * 1)
+#define ATRASO_SENSOR (1000UL * 10 * 1)
 unsigned long tempoDecorrido = millis() + ATRASO_SENSOR;//começa a contar o tempo
 
 
 // WIFI
-const char* SSID = "Repeat"; // SSID / nome da rede WI-FI que deseja se conectar
-const char* PASSWORD = "12345679@Repeat"; // Senha da rede WI-FI que deseja se conectar
+const char* SSID = "WEP"; // SSID / nome da rede WI-FI que deseja se conectar
+const char* PASSWORD = "vaidartudocerto"; // Senha da rede WI-FI que deseja se conectar
 
 
 // MQTT
-const char* BROKER_MQTT = "m12.cloudmqtt.com";
-int BROKER_PORT = 10858; // Porta do Broker MQTT
+//const char* BROKER_MQTT = "m12.cloudmqtt.com";
+//int BROKER_PORT = 10858; // Porta do Broker MQTT
+//const char* mqttUser = "niwveled";    //user
+//const char* mqttPassword = "Jhkots1UqEvF";  //password
+
+/*
+const char* BROKER_MQTT = "10.5.16.109";
+int BROKER_PORT = 1883; // Porta do Broker MQTT
+const char* mqttUser = "sdufjf";    //user
+const char* mqttPassword = "Sd2019-03";  //password
+*/
+const char* BROKER_MQTT = "10.5.16.109";
+int BROKER_PORT = 1883; // Porta do Broker MQTT
+const char* mqttUser = "sdufjf";    //user
+const char* mqttPassword = "Sd2019-03";  //password
+
+
+/*
+const char* BROKER_MQTT = "10.5.16.109";
+int BROKER_PORT = 1883; // Porta do Broker MQTT
 const char* mqttUser = "niwveled";    //user
 const char* mqttPassword = "Jhkots1UqEvF";  //password
+*/
 
-#define TOPICO_SUBSCRIBE "atuadores"     //tópico MQTT de escuta
-#define TOPICO_PUBLISH_LDR   "sensores/ldr" //tópico MQTT de envio de informações para Broker
+#define TOPICO_SUBSCRIBE "sd/3504/atuadores"     //tópico MQTT de escuta
+#define TOPICO_PUBLISH_LDR   "sd/3504/sensores/luminosidade" //tópico MQTT de envio de informações para Broker
 #define ID_MQTT  "camadaCoisas2"     //id mqtt (para identificação de sessão)
 
 //Variáveis e objetos globais
@@ -49,6 +68,8 @@ char valorLDR[10]; //array de caracter que armazena os dados captados pelo ldr
 
 //CODIGOS DO IR PARA EMITIR
 uint16_t ligaLG[71] = {9110, 4454,  574, 560,  576, 592,  550, 1714,  552, 586,  552, 588,  552, 586,  552, 590,  550, 564,  580, 1686,  580, 1714,  552, 556,  582, 1720,  548, 1704,  558, 1712,  556, 1712,  554, 1714,  556, 584,  552, 590,  552, 560,  580, 1710,  554, 586,  552, 588,  552, 588,  554, 586,  552, 1714,  554, 1686,  576, 1714,  554, 582,  556, 1712,  554, 1690,  578, 1712,  554, 1712,  552, 39936,  9100, 2226,  554};  // NEC 20DF10EF
+uint16_t ligaProj[135] = {8918, 4506,  530, 1710,  534, 1710,  534, 614,  508, 586,  534, 588,  534, 588,  532, 588,  534, 1710,  536, 1710,  532, 590,  532, 1712,  532, 588,  532, 1712,  532, 588,  532, 1712,  532, 590,  532, 590,  532, 590,  532, 588,  534, 590,  530, 1684,  564, 586,  560, 562,  534, 1684,  562, 1702,  542, 1680,  564, 1686,  558, 1658,  588, 584,  536, 1684,  562, 1694,  560, 572,  540, 40850,  8652, 4792,  258, 1966,  280, 1978,  266, 838,  286, 836,  288, 836,  284, 836,  286, 836,  298, 1974,  256, 1990,  254, 842,  284, 1986,  256, 844,  280, 1984,  254, 842,  282, 1992,  250, 842,  282, 838,  284, 838,  284, 836,  290, 830,  298, 1974,  254, 840,  294, 828,  298, 1968,  260, 1986,  260, 1962,  282, 1960,  284, 1958,  302, 794,  330, 1940,  300, 1920,  330, 768,  358};  // NEC C1AA09F6
+
 
 //Principais Funções
 void initSerial();
@@ -127,10 +148,32 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length)
   
     //toma ação dependendo da string recebida:
     //neste caso, envia um sinal para ligar o projetor
-    if (msg.equals("LigaProjetor"))
+    if (msg.equals("ligaProjetor") && EstadoSaida != '1')
     {
         Serial.println("Recebeu msg pra ligar projetor");
-        irsend.sendRaw(ligaLG, 71, 38);  // Send a raw data capture at 38kHz.
+        irsend.sendRaw(ligaProj, 135, 38);  // Send a raw data capture at 38kHz.
+        EstadoSaida = '1'; 
+    }
+
+     if (msg.equals("desligaProjetor") && EstadoSaida != '0')
+    {
+        Serial.println("Recebeu msg pra desligar projetor");
+        irsend.sendRaw(ligaProj, 135, 38);  // Send a raw data capture at 38kHz.
+        delay(1000);
+        irsend.sendRaw(ligaProj, 135, 38);  // Send a raw data capture at 38kHz.
+        EstadoSaida = '0'; 
+    }
+    
+    if (msg.equals("estadoProjetor"))
+    {
+        if (EstadoSaida == '1'){
+          delay(200);
+          MQTT.publish("sd/3504/atuadores/estado/projetor", "1");
+        }
+        else {
+          delay(200);
+          MQTT.publish("sd/3504/atuadores/estado/projetor", "0");
+        }
     }
     
 }
@@ -256,10 +299,14 @@ void loop()
     if((long)(millis() - tempoDecorrido) >= 0) {
       //chama a funcao para receber os dados do LDR
       leituraLDR();
+      //irsend.sendRaw(ligaProj, 135, 38);  // Send a raw data capture at 38kHz.
+      //Serial.println("MSG PARA LIGAR PROJETOR");
+      Serial.println("Estado Projetor:");
+      Serial.println(EstadoSaida);
       tempoDecorrido += ATRASO_SENSOR;
     }
     
-    leitorIR();
+    //leitorIR();
     
     //delay(1000); //aguarda 1 segundo para continuar execucao. No caso, é o atraso de leitura do LDR
   

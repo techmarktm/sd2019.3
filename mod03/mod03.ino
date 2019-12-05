@@ -1,6 +1,11 @@
 #include <WiFi.h> // Importa a Biblioteca ESP8266WiFi
 #include <PubSubClient.h> // Importa a Biblioteca PubSubClient
+#include <Adafruit_Sensor.h>
+#include <DHT.h>
+#define DHTTYPE    DHT11
+#define ATRASO_SENSOR (1000UL * 10 * 1)
 
+unsigned long tempoDecorrido = millis() + ATRASO_SENSOR;//começa a contar o tempo
 
 
 // WIFI
@@ -9,8 +14,8 @@ const char* PASSWORD = "vaidartudocerto"; // Senha da rede WI-FI que deseja se c
 //const char* SSID = "Repeat"; // SSID / nome da rede WI-FI que deseja se conectar
 //const char* PASSWORD = "12345679@Repeat"; // Senha da rede WI-FI que deseja se conectar
 
-
 /*
+// MQTT
 const char* BROKER_MQTT = "m12.cloudmqtt.com";
 int BROKER_PORT = 10858; // Porta do Broker MQTT
 const char* mqttUser = "niwveled";    //user
@@ -23,26 +28,26 @@ const char* mqttUser = "sdufjf";    //user
 const char* mqttPassword = "Sd2019-03";  //password
 
 #define TOPICO_SUBSCRIBE "sd/3504/atuadores"     //tópico MQTT de escuta
-#define TOPICO_PUBLISH   "sd/3504/sensores/porta"    //tópico MQTT de envio de informações para Broker
-#define ID_MQTT  "camadaCoisas1"     //id mqtt (para identificação de sessão)
+#define TOPICO_PUBLISH_TEMP   "sd/3504/sensores/temperatura"    //tópico MQTT de envio de informações para Broker
+#define TOPICO_PUBLISH_UMI   "sd/3504/sensores/umidade"    //tópico MQTT de envio de informações para Broker
+#define ID_MQTT  "camadaCoisas3"     //id mqtt (para identificação de sessão)
 
-
+String valorTMP_str;
+char valorTMP[4];
 
 //Variáveis e objetos globais
 WiFiClient espClient; // Cria o objeto espClient
 PubSubClient MQTT(espClient); // Instancia o Cliente MQTT passando o objeto espClient
 
-char EstadoSaida1 = '0';  //variável que armazena o estado atual da saída da luz 1
-char EstadoSaida2 = '0';  //variável que armazena o estado atual da saída da luz 2
-char EstadoPorta = '0'; //variável que armazena o estado atual do sensor da porta
+char EstadoSaida1 = '0';  //variável que armazena o estado atual da saída do Ventilador
+char EstadoSaida2 = '0';  //variável que armazena o estado atual da saída da Computador
 
 const int portaLuz1 = GPIO_NUM_19; //porta/pino da luz 1
 const int portaLuz2 = GPIO_NUM_18; //porta/pino da luz 2
-const int sensorPorta = GPIO_NUM_34; //porta/pino do sensor de porta
+const int DHTPIN = GPIO_NUM_23; //porta/pino do sensor de temp
 
-String valorSP_str;
-char valorSP[4];
- 
+DHT dht(DHTPIN, DHTTYPE);
+
 //Declaração das Funções
 void initSerial();
 void initWiFi();
@@ -62,11 +67,9 @@ void setup()
     initSerial();
     initWiFi();
     initMQTT();
-    int sensor = analogRead(sensorPorta);
-    verificaEstadoPorta(sensor);
     digitalWrite(portaLuz1, LOW);
     digitalWrite(portaLuz2, LOW);
-    EstadoSaida1 = '0';  //variável que armazena o estado atual da saída da luz 1
+    EstadoSaida1 = '0'; 
     EstadoSaida2 = '0';
 }
  
@@ -118,12 +121,9 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length)
        char c = (char)payload[i];
        msg += c;
     }
-    
+  
     //toma ação dependendo da string recebida:
-    //verifica se deve colocar nivel alto de tensão na saída da luz 1:
-    //IMPORTANTE: o Led já contido na placa é acionado com lógica invertida (ou seja,
-    //enviar HIGH para o output faz o Led apagar / enviar LOW faz o Led acender)
-    if (msg.equals("desligaLuzFrente") && EstadoSaida1 == '1')
+    if (msg.equals("desligaVentilador") && EstadoSaida1 == '1')
     {
         digitalWrite(portaLuz1, LOW);
         EstadoSaida1 = '0';
@@ -131,7 +131,7 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length)
     }
 
     //verifica se deve colocar nivel alto de tensão na saída da luz 1:
-    if (msg.equals("ligaLuzFrente") && EstadoSaida1 == '0')
+    if (msg.equals("ligaVentilador") && EstadoSaida1 == '0')
     {
         digitalWrite(portaLuz1, HIGH);
         EstadoSaida1 = '1';
@@ -139,7 +139,7 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length)
     }
 
     //verifica se deve colocar nivel baixo de tensão na saída da luz 1:
-    if (msg.equals("desligaLuzTras") && EstadoSaida2 == '1')
+    if (msg.equals("desligaPC") && EstadoSaida2 == '1')
     {
         digitalWrite(portaLuz2, LOW);
         EstadoSaida2 = '0';
@@ -147,36 +147,34 @@ void mqtt_callback(char* topic, byte* payload, unsigned int length)
     }
 
     //verifica se deve colocar nivel alto de tensão na saída da luz 1:
-    if (msg.equals("ligaLuzTras") && EstadoSaida2 == '0')
+    if (msg.equals("ligaPC") && EstadoSaida2 == '0')
     {
         digitalWrite(portaLuz2, HIGH);
         EstadoSaida2 = '1';
         //EnviaEstadoOutputMQTT();
     }
-    
-    if (msg.equals("estadoLuzFrente"))
+    if (msg.equals("estadoVentilador"))
     {
         if (EstadoSaida1 == '1'){
           delay(200);
-          MQTT.publish("sd/3504/atuadores/estado/luzFrente", "1");
+          MQTT.publish("sd/3504/atuadores/estado/ventilador", "1");
         }
         else {
           delay(200);
-          MQTT.publish("sd/3504/atuadores/estado/luzFrente", "0");
+          MQTT.publish("sd/3504/atuadores/estado/ventilador", "0");
         }
     }
-    if (msg.equals("estadoLuzTras"))
+    if (msg.equals("estadoPC"))
     {
         if (EstadoSaida2 == '1'){
           delay(200);
-          MQTT.publish("sd/3504/atuadores/estado/luzTras", "1");
+          MQTT.publish("sd/3504/atuadores/estado/pc", "1");
         }
         else {
           delay(200);
-          MQTT.publish("sd/3504/atuadores/estado/luzTras", "0");
+          MQTT.publish("sd/3504/atuadores/estado/pc", "0");
         }
     }
-    
 }
  
 //Função: reconecta-se ao broker MQTT (caso ainda não esteja conectado ou em caso de a conexão cair)
@@ -241,21 +239,6 @@ void VerificaConexoesWiFIEMQTT(void)
      reconectWiFi(); //se não há conexão com o WiFI, a conexão é refeita
 }
 
-//Função: envia ao Broker o estado atual do output 
-//Parâmetros: nenhum
-//Retorno: nenhum
-void EnviaEstadoOutputMQTT(void)
-{
-    if (EstadoSaida1 == '0')
-      MQTT.publish(TOPICO_PUBLISH, "LedsLigados");
-
-    if (EstadoSaida1 == '1')
-      MQTT.publish(TOPICO_PUBLISH, "LedsDesligados");
-
-    Serial.println("- Estado da saida enviado ao broker!");
-    //delay(1000);
-}
-
 //Função: inicializa o output em nível lógico baixo
 //Parâmetros: nenhum
 //Retorno: nenhum
@@ -266,61 +249,59 @@ void InitOutput(void)
     pinMode(portaLuz1, OUTPUT);
     digitalWrite(portaLuz1, HIGH); 
     pinMode(portaLuz2, OUTPUT);
-    digitalWrite(portaLuz2, HIGH); 
-    pinMode(sensorPorta, INPUT);
+    digitalWrite(portaLuz2, HIGH);
+    dht.begin();
+    //pinMode(sensorTemp, INPUT);
 }
 
-//verifica o estado inicial do sensor de porta (ao ligar o esp32)
-void verificaEstadoPorta(int sensor){
-  Serial.println("Estado Inicial do Sensor de Porta:");
-  if (sensor > 0){
-    EstadoPorta = '0';
-    Serial.println("Fechada");
-  }
-  else {
-    EstadoPorta = '1';
-    Serial.println("Aberta");
-  }
-}
 
-void eventoSensorPorta(){
+//Função: realiza a leitura do sensor ldr, imprime no terminal e publica no topico do MQTT os dados obtidos pelo sensor
+//Parâmetros: nenhum
+//Retorno: nenhum
+void leituraTemp(){
   
-    int sensor = analogRead(sensorPorta);
-  
-    if (sensor == 0 && EstadoPorta == '0'){
-      Serial.println("Valor do Sensor de Porta: A Porta foi aberta.");
-      Serial.println(sensor);
+    float temp = dht.readTemperature();
+    float umi = dht.readHumidity();
+    Serial.println("Temperatura Atual:");
+    Serial.println(temp);
+    Serial.println("Umidade Atual:");
+    Serial.println(umi);
+    Serial.println("Estado Ventilador:");
+    Serial.println(EstadoSaida1);
+    Serial.println("Estado PC:");
+    Serial.println(EstadoSaida2);
     
-      //publica o evento da porta ter sido aberta
-      valorSP_str = String(sensor); //converting ftemp (the float variable above) to a string 
-      valorSP_str.toCharArray(valorSP, valorSP_str.length() + 1); //packaging up the data to publish to mqtt whoa...
-      
-      MQTT.publish(TOPICO_PUBLISH, valorSP);
-      
-      EstadoPorta = '1';
-    }
+    valorTMP_str = String(temp); //converting ftemp (the float variable above) to a string
+    valorTMP_str.toCharArray(valorTMP, valorTMP_str.length() + 1); //packaging up the data to publish to mqtt whoa...
+    MQTT.publish(TOPICO_PUBLISH_TEMP, valorTMP);
 
-    if (sensor > 0 && EstadoPorta != '0'){
-      Serial.println("Valor do Sensor de Porta: A Porta foi fechada.");
-      Serial.println(sensor);
+    valorTMP_str = String(umi); //converting ftemp (the float variable above) to a string
+    valorTMP_str.toCharArray(valorTMP, valorTMP_str.length() + 1); //packaging up the data to publish to mqtt whoa...
+    MQTT.publish(TOPICO_PUBLISH_UMI, valorTMP);
+    /*
+    int raw = analogRead(sensorTemp);
+    double voltagem = (raw / 2048.0) * 3300;  
+    double temp = voltagem * 0.1;
+    Serial.println("Temperatura: ");
+    Serial.println(temp);
+
+    valorTMP_str = String(temp); //converting ftemp (the float variable above) to a string 
+    valorTMP_str.toCharArray(valorTMP, valorTMP_str.length() + 1); //packaging up the data to publish to mqtt whoa...
     
-      //publica o evento da porta ter sido fechada
-      valorSP_str = String(sensor); //converting ftemp (the float variable above) to a string 
-      valorSP_str.toCharArray(valorSP, valorSP_str.length() + 1); //packaging up the data to publish to mqtt whoa...
-      
-      MQTT.publish(TOPICO_PUBLISH, valorSP);
-      
-      EstadoPorta = '0';
-    }
-  delay(1000);
+    MQTT.publish(TOPICO_PUBLISH, valorTMP);
+    */
 }
 
 //programa principal
 void loop() 
 {   
-    
-    //verifica periodicamente se houve variação no sensor da porta (se ela foi fechada ou aberta)
-    //eventoSensorPorta();
+
+    // verifica se passou o tempo de atraso estipulado
+    if((long)(millis() - tempoDecorrido) >= 0) {
+      //chama a funcao para receber os dados do LDR
+      leituraTemp();
+      tempoDecorrido += ATRASO_SENSOR;
+    }
   
     //garante funcionamento das conexões WiFi e ao broker MQTT
     VerificaConexoesWiFIEMQTT();
